@@ -1,0 +1,58 @@
+import requests
+import time
+import json
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from telegram import Bot
+
+# Telegram sozlamalari
+TELEGRAM_BOT_TOKEN = "7526287976:AAFimuDgLq08DRsvh6va__RHDtZMBp_zrlU"
+TELEGRAM_CHAT_ID = "7526287976"
+
+# Solana DEX API
+JUPITER_API = "https://quote-api.jup.ag/v6/quote"
+DEXS_API = "https://api.dexscreener.com/latest/dex/pairs/solana"
+
+# AI model - Scam Risk Classifier
+def scam_risk_analysis(token_data):
+    features = np.array([[token_data["liquidity"], token_data["volume"], token_data["spread"]]])
+    model = RandomForestClassifier()
+    model.fit([[10000, 50000, 0.5], [500, 2000, 5]], [0, 1])  # Example training
+    return model.predict(features)[0]  # 0 = Safe, 1 = Risky
+
+# DEX’dan yangi tokenlarni olish
+def get_new_tokens():
+    try:
+        response = requests.get(DEXS_API)
+        data = response.json()
+        tokens = data.get("pairs", [])
+        new_tokens = []
+        for token in tokens:
+            if token["chainId"] == "solana" and token["age"] < 15:
+                new_tokens.append({
+                    "symbol": token["baseToken"]["symbol"],
+                    "address": token["baseToken"]["address"],
+                    "liquidity": token["liquidity"]["usd"],
+                    "volume": token["volume"]["usd"],
+                    "spread": token["priceChange"]["h24"]
+                })
+        return new_tokens
+    except Exception as e:
+        print("Error:", e)
+        return []
+
+# Tokenni baholash va Telegram’ga yuborish
+def process_tokens():
+    bot = Bot(token=TELEGRAM_BOT_TOKEN)
+    while True:
+        tokens = get_new_tokens()
+        for token in tokens:
+            risk = scam_risk_analysis(token)
+            if risk == 0 and "casino" not in token["symbol"].lower() and "porn" not in token["symbol"].lower():
+                message = f"🆕 Yangi Token Topildi!\n\n🔹 {token['symbol']}\n🔗 Contract: {token['address']}\n💰 Likvidlik: ${token['liquidity']}\n📊 Volume: ${token['volume']}\n🚀 Spread: {token['spread']}%\n\n📈 Potensial yaxshi!"
+                bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode="Markdown")
+        time.sleep(60)
+
+# Botni ishga tushirish
+if name == "main":
+    process_tokens()
